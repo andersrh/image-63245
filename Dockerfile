@@ -36,7 +36,7 @@ RUN dnf install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docke
 RUN rm -f /usr/lib64/libopenh264.so.2.4.1 /usr/lib64/libopenh264.so.7
 RUN rpm -Uvh --nodeps https://codecs.fedoraproject.org/openh264/42/x86_64/Packages/o/openh264-2.5.1-1.fc42.x86_64.rpm https://codecs.fedoraproject.org/openh264/42/x86_64/Packages/m/mozilla-openh264-2.5.1-1.fc42.x86_64.rpm
 
-RUN dnf install xlibre-xserver-Xorg xlibre-xf86-input-libinput xinput
+RUN dnf install xlibre-xserver-Xorg xlibre-xf86-input-libinput xinput -y
 
 # Install VLC
 RUN dnf install vlc vlc-plugins-freeworld vlc-plugin-pipewire -y
