@@ -1,0 +1,95 @@
+name: image
+
+on:
+  schedule:
+    - cron: '0 5 8,18,28 * *'
+  push:
+    paths:
+      - 'Dockerfile'
+      - 'etc/**'
+      - 'usr/**'
+      - 'repo/**'
+      - '.github/workflows/image.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # Påkrævet til cosign keyless signering
+
+    steps:
+      - name: Maximize build space
+        uses: AdityaGarg8/remove-unwanted-software@v5
+        with:
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Vi konstruerer tags her med branch-navnet som præfiks
+          tags: |
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ github.ref_name }}-10
+            type=raw,value=${{ github.ref_name }}-10.${{ steps.date.outputs.date }}
+
+      - name: Log into GHCR
+        if: github.event_name != 'pull_request'
+        run: |
+          buildah login -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }} ${{ env.REGISTRY }}
+
+      - name: Build image with Buildah
+        id: build-image
+        run: |
+          # Vi bygger med 'raw-img' lokalt
+          buildah bud \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            -t raw-img .
+
+          # Gem det primære tag til signering (vi tager det første fra listen)
+          PRIMARY_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
+          echo "primary_tag=$PRIMARY_TAG" >> $GITHUB_OUTPUT
+
+      - name: Push to GHCR
+        if: github.event_name != 'pull_request'
+        run: |
+          for tag in $(echo "${{ steps.meta.outputs.tags }}"); do
+            echo "Tagging and pushing: $tag"
+            buildah tag raw-img "$tag"
+            buildah push "$tag"
+          done
+
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3.3.0
+
+      # VI TILFØJER LOGIN TIL COSIGN HER
+      - name: Log into GHCR (Cosign)
+        if: github.event_name != 'pull_request'
+        run: |
+          cosign login ${{ env.REGISTRY }} -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sign image
+        if: github.event_name != 'pull_request'
+        run: |
+          # Vi signerer det primære tag.
+          # Vi bruger --yes til at acceptere betingelserne automatisk.
+          cosign sign --yes "${{ steps.build-image.outputs.primary_tag }}"
