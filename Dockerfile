@@ -10,7 +10,7 @@ RUN dnf config-manager --add-repo https://copr.fedorainfracloud.org/coprs/g/xlib
 
 RUN dnf install sonic-workspace-x11 sonic-win sonic-interface-libraries sonic-workspace --allowerasing -y
 
-RUN dnf install -y fish distrobox nvtop intel-media-driver libva-intel-driver htop
+RUN dnf install -y fish distrobox nvtop intel-media-driver libva-intel-driver htop firefox
 
 # Remove plocate to avoid updatedb going crazy with scanning the file system once a day
 RUN dnf remove -y plocate
